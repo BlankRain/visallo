@@ -57,16 +57,11 @@ define([
 
         changedOnServer: (productId) => (dispatch, getState) => {
             const state = getState();
-            const productWorkspaceId = _.findKey(state.product.workspaces, workspace => productId in workspace.products);
-
-            if (productWorkspaceId) {
-                dispatch(api.get({
+            dispatch(api.get({
                     productId,
                     invalidate: true,
                     includeExtended: selectors.getSelectedId(state) === productId
                 }));
-            }
-
         },
 
         update: (product) => ({
