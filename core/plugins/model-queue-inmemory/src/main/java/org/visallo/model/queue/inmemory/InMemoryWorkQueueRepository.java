@@ -90,7 +90,7 @@ public class InMemoryWorkQueueRepository extends WorkQueueRepository {
     broadcastConsumers.add(broadcastConsumer);
   }
 
-  // @Override
+  @Override
   public void unsubscribeFromBroadcastMessages(BroadcastConsumer broadcastConsumer) {
     broadcastConsumers.remove(broadcastConsumer);
   }
@@ -114,14 +114,14 @@ public class InMemoryWorkQueueRepository extends WorkQueueRepository {
     };
   }
 
-  @Override
-  public Map<String, Status> getQueuesStatus() {
-    Map<String, Status> results = new HashMap<>();
-    for (Entry<String, Deque<byte[]>> queue : queues.entrySet()) {
-      results.put(queue.getKey(), new QueueStatus(queue.getValue().size()));
-    }
-    return results;
-  }
+  // @Override
+  // public Map<String, Status> getQueuesStatus() {
+  //   Map<String, Status> results = new HashMap<>();
+  //   for (Entry<String, Deque<byte[]>> queue : queues.entrySet()) {
+  //     results.put(queue.getKey(), new QueueStatus(queue.getValue().size()));
+  //   }
+  //   return results;
+  // }
 
   public static void clearQueue() {
     queues.clear();
