@@ -6,6 +6,7 @@ package ${package}.cli;
 import com.beust.jcommander.Parameters;
 import com.google.inject.Inject;
 import ${package}.OntologyConstants;
+import org.vertexium.EdgeBuilderByVertexId;
 import org.vertexium.Visibility;
 import org.visallo.core.cmdline.CommandLineTool;
 import org.visallo.core.model.graph.GraphRepository;
@@ -47,11 +48,10 @@ public class ExampleCommandLineTool extends CommandLineTool {
                 }
                 OntologyConstants.PERSON_FULL_NAME_PROPERTY.updateProperty(elemCtx, "Jane Doe", propertyMetadata);
             });
-            OntologyConstants.PERSON_FULL_NAME_PROPERTY.updateProperty(elemCtx, "Jane Doe", propertyMetadata);
 
             // create an edge
             if (!getGraph().doesEdgeExist("v1-to-v2", getAuthorizations())) {
-                EdgeBuilder e = graph.prepareEdge("v1-to-v2", "v1", "v2", OntologyConstants.KNOWS_EDGE_LABEL, visibility);
+                EdgeBuilderByVertexId e = getGraph().prepareEdge("v1-to-v2", "v1", "v2", OntologyConstants.KNOWS_EDGE_LABEL, visibility);
                 ctx.update(e, elemCtx -> {
                     elemCtx.updateBuiltInProperties(propertyMetadata);
                 });

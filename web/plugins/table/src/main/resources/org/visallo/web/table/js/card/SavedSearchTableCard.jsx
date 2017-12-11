@@ -14,7 +14,7 @@ define([
     const COLUMN_WIDTH = 100;
     const DEFAULT_ROW_NUMBERS = true;
     const DEFAULT_TAB_SETTINGS = {
-        direction: 'ASCENDING',
+        direction: 'DESCENDING',
         sortPropertyIri: '',
         columns: [],
         active: false
@@ -397,7 +397,7 @@ define([
                                     const options = {defaultValue: ' '};
                                     displayValuePromise = Promise.resolve(F[type].prop(result, title, p.key, options));
                                 } else if (ontologyProperty.displayType && F[type].properties[ontologyProperty.displayType]) {
-                                    displayValuePromise = Promise.resolve(F[type].properties[ontologyProperty.displayType](wrapper, p))
+                                    displayValuePromise = Promise.resolve(F[type].properties[ontologyProperty.displayType](wrapper, p, result))
                                         .then((el) => {
                                             if (!el) {
                                                 legacyFormattersError();
@@ -407,7 +407,7 @@ define([
                                             }
                                         });
                                 } else if (ontologyProperty.dataType && F[type].properties[ontologyProperty.dataType]) {
-                                    displayValuePromise = Promise.resolve(F[type].properties[ontologyProperty.dataType](wrapper, p))
+                                    displayValuePromise = Promise.resolve(F[type].properties[ontologyProperty.dataType](wrapper, p, result))
                                         .then((el) => {
                                             if (!el) {
                                                 legacyFormattersError();
@@ -538,7 +538,6 @@ define([
         },
 
         switchToTab(tabId) {
-            
             let { tableView } = this.state;
             tableView = _.mapObject(tableView, (val, key) => {
                 if (_.isObject(val)) {
@@ -554,7 +553,7 @@ define([
             _.defer(() => {this.loadRows(0, PAGE_SIZE)});
         },
 
-        onRowClick(event, index) {
+        onRowClick(event, { index }) {
             const { tableData, tableView, previousRowClickIndex } = this.state;
             const { searchId } = this.props.item.configuration;
             const url = tableView.url;
@@ -590,11 +589,10 @@ define([
                 currentSelection[type] = [id];
             }
 
-            if (!event.shiftKey)  {
+            if (!event.shiftKey) {
                 this.setState({ previousRowClickIndex: index });
             }
 
-            
             this.props.onSetSelection(currentSelection);
 
             function isDiscontiguousSelectionKeyPressed(evt) {
@@ -640,13 +638,13 @@ define([
             const { searchId } = this.props.item.configuration;
             const activeTab = _.findKey(tableView, (tab) => tab.active || false);
             let tabSettings = tableView[activeTab];
-            const sortDirection = tabSettings.direction === 'ASCENDING' ? 'DESCENDING' : 'ASCENDING';
             const column = tabSettings.columns.find(({ title }) => title === header);
 
             if (!column.sortPropertyIri) {
-                column.sortPropertyIri = getSortPropertyIri(header);
+                column.sortPropertyIri = getSortPropertyIri(this.props.properties[header], header);
             }
             const sortPropertyIri = column.sortPropertyIri;
+            const sortDirection = (!tabSettings.sortPropertyIri || tabSettings.direction === 'ASCENDING') ? 'DESCENDING' : 'ASCENDING';
             const isSortable = this.props.properties[sortPropertyIri].sortable !== false;
 
             if (!isSortable) return;
@@ -661,8 +659,7 @@ define([
             this.setState({ tableData: tableData });
             this.loadRows(0, PAGE_SIZE);
 
-            function getSortPropertyIri(title) {
-                const ontologyProperty = this.props.properties[title];
+            function getSortPropertyIri(ontologyProperty, title) {
                 const isCompoundField = !!ontologyProperty.dependentPropertyIris;
 
                 if (!isCompoundField) {

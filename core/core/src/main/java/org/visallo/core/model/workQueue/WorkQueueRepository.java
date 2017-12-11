@@ -573,7 +573,9 @@ public abstract class WorkQueueRepository {
         users.put(userId);
         permissions.put("users", users);
         json.put("permissions", permissions);
-        json.put("data", longRunningProcessQueueItem.get("id"));
+        JSONObject data = new JSONObject();
+        data.put("processId", longRunningProcessQueueItem.get("id"));
+        json.put("data", data);
         broadcastJson(json);
     }
 
@@ -612,11 +614,11 @@ public abstract class WorkQueueRepository {
     }
 
     public void broadcastWorkProductChange(String workProductId, String workspaceId, User user, String skipSourceGuid) {
-        broadcastWorkProductChange(workProductId, skipSourceGuid, getPermissionsWithWorkspace(workspaceId));
+        broadcastWorkProductChange(workProductId, skipSourceGuid, workspaceId, getPermissionsWithWorkspace(workspaceId));
     }
 
     public void broadcastWorkProductChange(String workProductId, ClientApiWorkspace workspace, User user, String skipSourceGuid) {
-        broadcastWorkProductChange(workProductId, skipSourceGuid, getPermissionsWithUsers(workspace, null));
+        broadcastWorkProductChange(workProductId, skipSourceGuid, workspace.getWorkspaceId(), getPermissionsWithUsers(workspace, null));
     }
 
     public void broadcastWorkProductPreviewChange(String workProductId, String workspaceId, User user, String md5) {
@@ -895,12 +897,13 @@ public abstract class WorkQueueRepository {
     }
 
 
-    protected void broadcastWorkProductChange(String workProductId, String skipSourceGuid, JSONObject permissions) {
+    protected void broadcastWorkProductChange(String workProductId, String skipSourceGuid, String workspaceId, JSONObject permissions) {
         JSONObject json = new JSONObject();
         json.put("type", "workProductChange");
         json.put("permissions", permissions);
         JSONObject dataJson = new JSONObject();
         dataJson.put("id", workProductId);
+        dataJson.put("workspaceId", workspaceId);
         dataJson.putOpt("sourceGuid", skipSourceGuid);
         json.put("data", dataJson);
         broadcastJson(json);
@@ -1212,6 +1215,8 @@ public abstract class WorkQueueRepository {
 
     public abstract void subscribeToBroadcastMessages(BroadcastConsumer broadcastConsumer);
 
+    public abstract void unsubscribeFromBroadcastMessages(BroadcastConsumer broadcastConsumer);
+
     public abstract WorkerSpout createWorkerSpout(String queueName);
 
     public void broadcastPublishVertexDelete(Vertex vertex) {
@@ -1348,7 +1353,17 @@ public abstract class WorkQueueRepository {
     }
 
     public static abstract class BroadcastConsumer {
+        private String consumerKey;
+
         public abstract void broadcastReceived(JSONObject json);
+
+        public String getConsumerKey() {
+            return consumerKey;
+        }
+
+        public void setConsumerKey(String consumerKey) {
+            this.consumerKey = consumerKey;
+        }
     }
 
     protected WorkQueueNames getWorkQueueNames() {

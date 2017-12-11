@@ -9,6 +9,7 @@ import org.vertexium.Authorizations;
 import org.vertexium.type.GeoCircle;
 import org.vertexium.type.GeoHash;
 import org.vertexium.type.GeoPoint;
+import org.vertexium.type.GeoShape;
 import org.visallo.core.exception.VisalloException;
 import org.visallo.core.model.properties.types.*;
 import org.visallo.core.user.User;
@@ -93,6 +94,8 @@ public abstract class OntologyProperty {
 
     public abstract List<String> getRelationshipIris();
 
+    public abstract Integer getSortPriority();
+
     public void updateIntents(String[] newIntents, Authorizations authorizations) {
         ArrayList<String> toBeRemovedIntents = Lists.newArrayList(getIntents());
         for (String newIntent : newIntents) {
@@ -148,6 +151,7 @@ public abstract class OntologyProperty {
             result.setDeleteable(getDeleteable());
             result.setUpdateable(getUpdateable());
             result.setSandboxStatus(getSandboxStatus());
+            result.setSortPriority(getSortPriority());
             if (getPossibleValues() != null) {
                 result.getPossibleValues().putAll(getPossibleValues());
             }
@@ -180,6 +184,11 @@ public abstract class OntologyProperty {
                 break;
             case GEO_LOCATION:
                 if (value instanceof GeoPoint) {
+                    return value;
+                }
+                break;
+            case GEO_SHAPE:
+                if (value instanceof GeoShape) {
                     return value;
                 }
                 break;
@@ -348,6 +357,8 @@ public abstract class OntologyProperty {
                 return new DoubleVisalloProperty(getIri());
             case GEO_LOCATION:
                 return new GeoPointVisalloProperty(getIri());
+            case GEO_SHAPE:
+                return new GeoShapeVisalloProperty(getIri());
             case INTEGER:
                 return new IntegerVisalloProperty(getIri());
             case STRING:

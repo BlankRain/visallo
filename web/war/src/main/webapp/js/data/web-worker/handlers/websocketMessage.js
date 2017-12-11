@@ -29,8 +29,9 @@ define([
                 })
             },
             workProductChange: function(data) {
+                const { id, workspaceId} = data;
                 require(['../store/product/actions-impl'], function(actions) {
-                    store.getStore().dispatch(actions.changedOnServer(data.id));
+                    store.getStore().dispatch(actions.changedOnServer({ productId: id, workspaceId }));
                 })
             },
             workProductDelete: function(data) {
@@ -107,11 +108,11 @@ define([
                     })
                 }
             },
-            longRunningProcessDeleted: function(processId) {
+            longRunningProcessDeleted: function(data) {
                 dispatchMain('rebroadcastEvent', {
                     eventName: 'longRunningProcessDeleted',
                     data: {
-                        processId: processId
+                        processId: data.processId
                     }
                 });
             },

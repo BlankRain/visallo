@@ -62,6 +62,7 @@ public class Configuration {
     public static final String GRAPH_PROVIDER = "graph";
     public static final String VISIBILITY_TRANSLATOR = "security.visibilityTranslator";
     public static final String WEB_CONFIGURATION_PREFIX = "web.ui.";
+    public static final String VIDEO_PREVIEW_FRAMES_COUNT = WEB_CONFIGURATION_PREFIX + "video.preview.frames.count";
     public static final String WEB_GEOCODER_ENABLED = WEB_CONFIGURATION_PREFIX + "geocoder.enabled";
     public static final String MAPZEN_ENABLED = WEB_CONFIGURATION_PREFIX + "mapzen.enabled";
     public static final String MAPZEN_TILE_API_KEY = "mapzen.tile.api.key";
@@ -336,7 +337,7 @@ public class Configuration {
     }
 
     public Iterable<String> getKeys() {
-        return this.config.keySet();
+        return new HashSet<>(this.config.keySet());
     }
 
     public Iterable<String> getKeys(String keyPrefix) {

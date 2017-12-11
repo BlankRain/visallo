@@ -461,18 +461,56 @@ define([
              * @returns {object} concept
              */
             concept: function(vertex) {
-                var conceptType = vertex && V.prop(vertex, 'conceptType'), concept;
+                if (!vertex || vertex.type !== 'vertex') {
+                    throw new Error('Not a vertex, unable to get concept', vertex);
+                }
+                return V.ontology(vertex)
+            },
 
-                if (!conceptType || conceptType === 'Unknown') {
-                    conceptType = 'http://www.w3.org/2002/07/owl#Thing';
+            /**
+             * Given an edge, get the ontology relationship object.
+             *
+             * If not found in ontology returns undefined
+             *
+             * @param {object} edge
+             * @returns {object} relationship
+             */
+            relationship: function(edge) {
+                if (!edge || edge.type !== 'edge') {
+                    throw new Error('Not an edge, unable to get relationship', edge);
+                }
+                return V.ontology(edge)
+            },
+
+            /**
+             * Given a vertex or edge, get the ontology concept/relationship object.
+             *
+             * If not found in ontology returns root concept (if vertex) or null (if relationship).
+             *
+             * @param {object} element
+             * @returns {object} ontology
+             */
+            ontology: function(element) {
+                var ontology;
+                if (element.type === 'vertex') {
+                    var conceptType = element && element.conceptType;
+
+                    if (!conceptType || conceptType === 'Unknown') {
+                        conceptType = 'http://www.w3.org/2002/07/owl#Thing';
+                    }
+
+                    ontology = getConcept(conceptType);
+                    if (!ontology) {
+                        console.warn('Concept: ' + conceptType + ' is not in ontology');
+                        ontology = getConcept('http://www.w3.org/2002/07/owl#Thing');
+                    }
+                } else if (element.type === 'edge') {
+                    ontology = element && element.label && getRelationship(element.label)
+                } else {
+                    console.warn('Unknown element type', element.type, element)
                 }
 
-                concept = getConcept(conceptType);
-                if (!concept && conceptType !== 'relationship') {
-                    console.warn('Concept: ' + conceptType + ' is not in ontology');
-                    concept = getConcept('http://www.w3.org/2002/07/owl#Thing');
-                }
-                return concept;
+                return ontology
             },
 
             /**
@@ -1030,6 +1068,7 @@ define([
                 if (values.length) {
                     var properties = [];
                     if (dependentIris) {
+                        var hasValue = false;
                         dependentIris.forEach(function(iri, i) {
                             var property = _.findWhere(vertex.properties, {
                                     name: iri,
@@ -1049,8 +1088,17 @@ define([
                                     value: value
                                 };
                             }
+                            hasValue = hasValue || (
+                                property.value !== undefined
+                                && property.value !== ''
+                                && property.value !== null
+                            );
                             properties.push(property);
                         })
+
+                        if (!hasValue) {
+                            return false
+                        }
                     }
                     vertex = _.extend({}, vertex, { properties: properties });
                 }
@@ -1196,7 +1244,7 @@ define([
             isEdge: function(vertex) { return vertex && vertex.type && vertex.type === 'edge'; },
 
             isExtendedDataRow: function(item) {
-                return (item.id && item.id.rowId) || (item.type === 'extendedDataRow');
+                return item && ((item.id && item.id.rowId) || (item.type === 'extendedDataRow'));
             },
 
             isArtifact: function(vertex) {
@@ -1309,7 +1357,8 @@ define([
     function transformMatchingVertexProperties(vertex, propertyNames, optionalKey) {
         var CONFIDENCE = 'http://visallo.org#confidence',
             properties = [],
-            hasKey = !_.isUndefined(optionalKey);
+            hasKey = !_.isUndefined(optionalKey),
+            pTransformSortValueMap = new WeakMap();
 
         if (vertex.propertiesByName) {
             for (var i = 0; i < propertyNames.length; i++) {
@@ -1328,10 +1377,10 @@ define([
         }
 
         return _.forEach(properties, function(p) {
-                if (!p.tranformSortValue) {
+                if (!pTransformSortValueMap.get(p)) {
                     var pDisplay = V.propDisplay(p.name, p.value);
                     if (_.isString(pDisplay)) {
-                        p.tranformSortValue = pDisplay.toLowerCase();
+                        pTransformSortValueMap.set(p, pDisplay.toLowerCase());
                     }
                 }
             })
@@ -1345,8 +1394,10 @@ define([
                     p2HasCon ? 1 : 0;
 
                 if (compareConf === 0) {
-                    if (_.isString(p1.tranformSortValue) && _.isString(p2.tranformSortValue)) {
-                        return p1.tranformSortValue.localeCompare(p2.tranformSortValue);
+                    var p1TransformSortValue = pTransformSortValueMap.get(p1),
+                        p2TransformSortValue = pTransformSortValueMap.get(p2);
+                    if (_.isString(p1TransformSortValue) && _.isString(p2TransformSortValue)) {
+                        return p1TransformSortValue.localeCompare(p2TransformSortValue);
                     }
                     return 0;
                 }

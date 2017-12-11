@@ -24,16 +24,20 @@ var VisalloAmdExternals = [
     'util/vertex/formatters',
     'util/retina',
     'util/withContextMenu',
+    'util/withDataRequest',
     'util/mapConfig',
      'openlayers',
     'fast-json-patch',
     'updeep',
+    'classnames',
     'react',
+    'react-virtualized',
     'create-react-class',
     'prop-types',
     'react-dom',
     'redux',
-    'react-redux'
+    'react-redux',
+    'jscache'
 ].map(path => ({ [path]: { amd: path, commonjs2: false, commonjs: false }}));
 
 var baseConfig = {
@@ -89,7 +93,9 @@ module.exports = [
     }),
     Object.assign({}, baseConfig, {
         entry: {
-            Map: './MapContainer.jsx'
+            Map: './MapContainer.jsx',
+            MapLayersContainer: './layers/MapLayersContainer.jsx',
+            geoShapePreview: './detail/geoShapePreview'
         },
         target: 'web'
     })

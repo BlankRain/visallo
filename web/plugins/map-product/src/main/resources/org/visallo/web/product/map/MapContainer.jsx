@@ -1,6 +1,7 @@
 define([
     'react-redux',
     'react-dom',
+    'configuration/plugins/registry',
     'data/web-worker/store/selection/actions',
     'data/web-worker/store/product/actions',
     'data/web-worker/store/product/selectors',
@@ -8,10 +9,12 @@ define([
     'util/dnd',
     './worker/actions',
     'components/DroppableHOC',
-    './Map'
+    './Map',
+    './util/layerHelpers'
 ], function(
     redux,
     ReactDom,
+    registry,
     selectionActions,
     productActions,
     productSelectors,
@@ -19,14 +22,28 @@ define([
     dnd,
     mapActions,
     DroppableHOC,
-    Map) {
+    Map,
+    layerHelpers) {
     'use strict';
+
+    registry.registerExtension('org.visallo.product.toolbar.item', {
+        identifier: 'org-visallo-map-layers',
+        itemComponentPath: 'org/visallo/web/product/map/dist/MapLayersContainer',
+        placementHint: 'popover',
+        label: i18n('org.visallo.web.product.map.MapWorkProduct.layers.toolbar.item.label'),
+        canHandle: (product) => product.kind === 'org.visallo.web.product.map.MapWorkProduct'
+    });
 
     const mimeTypes = [VISALLO_MIMETYPES.ELEMENTS];
 
     return redux.connect(
 
         (state, props) => {
+            const product = productSelectors.getProduct(state);
+            const layerConfig = product.extendedData
+                && product.extendedData['org-visallo-map-layers']
+                && product.extendedData['org-visallo-map-layers'].config;
+
             return {
                 ...props,
                 workspaceId: state.workspace.currentId,
@@ -38,9 +55,11 @@ define([
                 productElementIds: productSelectors.getElementIdsInProduct(state),
                 product: productSelectors.getProduct(state),
                 elements: productSelectors.getElementsInProduct(state),
+                focused: productSelectors.getFocusedElementsInProduct(state),
                 pixelRatio: state.screen.pixelRatio,
                 mimeTypes,
-                style: { height: '100%' }
+                style: { height: '100%' },
+                layerConfig
             }
         },
 
@@ -76,7 +95,9 @@ define([
 
                 onVertexMenu: (element, vertexId, position) => {
                     $(element).trigger('showVertexContextMenu', { vertexId, position });
-                }
+                },
+
+                setLayerOrder: (layerOrder) => dispatch(mapActions.setLayerOrder(props.product.id, layerOrder))
             }
         }
 

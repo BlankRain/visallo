@@ -5,6 +5,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.vertexium.*;
 import org.vertexium.query.*;
+import org.vertexium.type.GeoShape;
 import org.visallo.core.config.Configuration;
 import org.visallo.core.exception.VisalloException;
 import org.visallo.core.model.directory.DirectoryRepository;
@@ -239,51 +240,60 @@ public abstract class VertexiumObjectSearchRunnerBase extends SearchRunner {
     protected abstract QueryAndData getQuery(SearchOptions searchOptions, Authorizations authorizations);
 
     protected void applyConceptTypeFilterToQuery(QueryAndData queryAndData, SearchOptions searchOptions) {
-        Query query = queryAndData.getQuery();
-        String conceptTypes = searchOptions.getOptionalParameter("conceptTypes", String.class);
-        if (conceptTypes == null) {
-            // Try legacy conceptType parameter
-            String conceptType = searchOptions.getOptionalParameter("conceptType", String.class);
-            if (conceptType != null) {
-                final Boolean includeChildNodes = searchOptions.getOptionalParameter("includeChildNodes", Boolean.class);
-                ontologyRepository.addConceptTypeFilterToQuery(query, conceptType, (includeChildNodes == null || includeChildNodes), searchOptions.getWorkspaceId());
-            }
-        } else {
-            ontologyRepository.addConceptTypeFilterToQuery(query, getTypeFilters(conceptTypes), searchOptions.getWorkspaceId());
+        Collection<OntologyRepository.ElementTypeFilter> conceptTypeFilters = getConceptTypeFilters(searchOptions);
+        if (conceptTypeFilters != null) {
+            ontologyRepository.addConceptTypeFilterToQuery(queryAndData.getQuery(), conceptTypeFilters, searchOptions.getWorkspaceId());
         }
     }
 
     protected void applyEdgeLabelFilterToQuery(QueryAndData queryAndData, SearchOptions searchOptions) {
-        Query query = queryAndData.getQuery();
-        String labels = searchOptions.getOptionalParameter("edgeLabels", String.class);
-        if (labels == null) {
-            // Try legacy edgeLabel parameter
-            String edgeLabel = searchOptions.getOptionalParameter("edgeLabel", String.class);
-            if (edgeLabel != null) {
-                final Boolean includeChildNodes = searchOptions.getOptionalParameter("includeChildNodes", Boolean.class);
-                ontologyRepository.addEdgeLabelFilterToQuery(query, edgeLabel, (includeChildNodes == null || includeChildNodes), searchOptions.getWorkspaceId());
-            }
-        } else {
-            ontologyRepository.addEdgeLabelFilterToQuery(query, getTypeFilters(labels), searchOptions.getWorkspaceId());
+        Collection<OntologyRepository.ElementTypeFilter> edgeFilters = getEdgeLabelFilters(searchOptions);
+        if (edgeFilters != null) {
+            ontologyRepository.addEdgeLabelFilterToQuery(queryAndData.getQuery(), edgeFilters, searchOptions.getWorkspaceId());
         }
     }
 
-    private Collection<OntologyRepository.ElementTypeFilter> getTypeFilters(String typesStr) {
-        JSONArray types = new JSONArray(typesStr);
-        List<OntologyRepository.ElementTypeFilter> filters = new ArrayList<>(types.length());
-        for (int i = 0; i < types.length(); i++) {
-            JSONObject type = (JSONObject) types.get(i);
-            OntologyRepository.ElementTypeFilter filter = ClientApiConverter.toClientApi(type, OntologyRepository.ElementTypeFilter.class);
-            filters.add(filter);
+    protected Collection<OntologyRepository.ElementTypeFilter> getEdgeLabelFilters(SearchOptions searchOptions) {
+        return getElementTypeFilters("edgeLabels", "edgeLabel", searchOptions);
+    }
+
+    protected Collection<OntologyRepository.ElementTypeFilter> getConceptTypeFilters(SearchOptions searchOptions) {
+        return getElementTypeFilters("conceptTypes", "conceptType", searchOptions);
+    }
+
+    private Collection<OntologyRepository.ElementTypeFilter> getElementTypeFilters(String parameterName, String legacyParameterName, SearchOptions searchOptions) {
+        String typesStr = searchOptions.getOptionalParameter(parameterName, String.class);
+        if (typesStr != null) {
+            JSONArray types = new JSONArray(typesStr);
+            List<OntologyRepository.ElementTypeFilter> filters = new ArrayList<>(types.length());
+            for (int i = 0; i < types.length(); i++) {
+                JSONObject type = types.getJSONObject(i);
+                OntologyRepository.ElementTypeFilter filter = ClientApiConverter.toClientApi(type, OntologyRepository.ElementTypeFilter.class);
+                filters.add(filter);
+            }
+            return filters;
         }
-        return filters;
+
+        // Try the legacy parameter
+        String elementType = searchOptions.getOptionalParameter(legacyParameterName, String.class);
+        if (elementType != null) {
+            Boolean includeChildNodes = searchOptions.getOptionalParameter("includeChildNodes", Boolean.class);
+            return Collections.singleton(new OntologyRepository.ElementTypeFilter(elementType, includeChildNodes));
+        }
+        return null;
     }
 
     protected void applyFiltersToQuery(QueryAndData queryAndData, JSONArray filterJson, User user, SearchOptions searchOptions) {
         for (int i = 0; i < filterJson.length(); i++) {
             JSONObject obj = filterJson.getJSONObject(i);
             if (obj.length() > 0) {
-                updateQueryWithFilter(queryAndData.getQuery(), obj, user, searchOptions);
+                if (obj.has("propertyName")) {
+                    updateQueryWithPropertyNameFilter(queryAndData.getQuery(), obj, user, searchOptions);
+                } else if (obj.has("dataType")) {
+                    updateQueryWithDataTypeFilter(queryAndData.getQuery(), obj, user, searchOptions);
+                } else {
+                    throw new VisalloException("Query filters must have either a propertyName or dataType field. Invalid filter: " + filterJson.toString());
+                }
             }
         }
     }
@@ -294,7 +304,34 @@ public abstract class VertexiumObjectSearchRunnerBase extends SearchRunner {
         return filterJson;
     }
 
-    private void updateQueryWithFilter(Query graphQuery, JSONObject obj, User user, SearchOptions searchOptions) {
+    private void updateQueryWithDataTypeFilter(Query graphQuery, JSONObject obj, User user, SearchOptions searchOptions) {
+        String dataType = obj.getString("dataType");
+        String predicateString = obj.optString("predicate");
+        PropertyType propertyType = PropertyType.valueOf(dataType);
+        try {
+            if ("has".equals(predicateString)) {
+                graphQuery.has(PropertyType.getTypeClass(propertyType));
+            } else if ("hasNot".equals(predicateString)) {
+                graphQuery.hasNot(PropertyType.getTypeClass(propertyType));
+            } else if ("in".equals(predicateString)) {
+                JSONArray values = obj.getJSONArray("values");
+                graphQuery.has(PropertyType.getTypeClass(propertyType), Contains.IN, JSONUtil.toList(values));
+            } else {
+                JSONArray values = obj.getJSONArray("values");
+                Object value0 = jsonValueToObject(values, propertyType, 0);
+                if (PropertyType.GEO_LOCATION.equals(propertyType)) {
+                    GeoCompare geoComparePredicate = GeoCompare.valueOf(predicateString.toUpperCase());
+                    graphQuery.has(GeoShape.class, geoComparePredicate, value0);
+                } else {
+                    throw new UnsupportedOperationException("Data type queries are not yet supported for type: " + dataType);
+                }
+            }
+        } catch (ParseException ex) {
+            throw new VisalloException("Could not update query with filter:\n" + obj.toString(2), ex);
+        }
+    }
+
+    private void updateQueryWithPropertyNameFilter(Query graphQuery, JSONObject obj, User user, SearchOptions searchOptions) {
         try {
             String predicateString = obj.optString("predicate");
             String propertyName = obj.getString("propertyName");
@@ -316,7 +353,8 @@ public abstract class VertexiumObjectSearchRunnerBase extends SearchRunner {
                 } else if (PropertyType.BOOLEAN.equals(propertyDataType)) {
                     graphQuery.has(propertyName, Compare.EQUAL, value0);
                 } else if (PropertyType.GEO_LOCATION.equals(propertyDataType)) {
-                    graphQuery.has(propertyName, GeoCompare.WITHIN, value0);
+                    GeoCompare geoComparePredicate = GeoCompare.valueOf(predicateString.toUpperCase());
+                    graphQuery.has(propertyName, geoComparePredicate, value0);
                 } else if ("<".equals(predicateString)) {
                     graphQuery.has(propertyName, Compare.LESS_THAN, value0);
                 } else if (">".equals(predicateString)) {
@@ -459,6 +497,10 @@ public abstract class VertexiumObjectSearchRunnerBase extends SearchRunner {
             return values.get(index);
         }
         return OntologyProperty.convert(values, propertyDataType, index);
+    }
+
+    protected OntologyRepository getOntologyRepository() {
+        return ontologyRepository;
     }
 
     protected Graph getGraph() {

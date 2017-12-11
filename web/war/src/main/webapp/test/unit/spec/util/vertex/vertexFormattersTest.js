@@ -67,11 +67,17 @@ define([
                 properties = id;
                 id = null;
             }
-            return {
+
+            const conceptProp = (properties || []).find(p => p.name === PROPERTY_NAME_CONCEPT);
+
+            const vertex = {
                 id: id || `testVertex-${elementIdent++}`,
                 properties: properties || [],
-                type: 'vertex'
-            }
+                type: 'vertex',
+                conceptType: conceptProp ? conceptProp.value : ''
+            };
+
+            return vertex;
         };
 
     describe('vertex formatters', function() {
@@ -590,6 +596,18 @@ define([
 
                 expect(V.propValid(vertex, [['override last name'], [undefined]], COMPOUND_PROPERTY_NAME)).to.be.false
                 expect(V.propValid(vertex, [['override last name'], ['first']], COMPOUND_PROPERTY_NAME)).to.be.true
+            })
+
+            it('should validate with at least one overriding value', function() {
+                var vertex = vertexFactory([
+                    propertyFactory(PROPERTY_NAME_GEO_AND_DATE_DATE, 'k1', Date.UTC(2017, 12, 1)),
+                    propertyFactory(PROPERTY_NAME_GEO_AND_DATE_GEO, 'k1', { latitude: 1, longitude: 1 }),
+                    propertyFactory(PROPERTY_NAME_CONCEPT, 'http://visallo.org/dev#person')
+                ]);
+
+                expect(V.propValid(vertex, ['', ''], PROPERTY_NAME_GEO_AND_DATE, 'k1')).to.be.false
+                expect(V.propValid(vertex, [undefined, Date.UTC(2017, 12, 1)], PROPERTY_NAME_GEO_AND_DATE, 'k1')).to.be.true
+                expect(V.propValid(vertex, [{ latitude: 1, longitude: 1 }, undefined], PROPERTY_NAME_GEO_AND_DATE, 'k1')).to.be.true
             })
 
             it('should not modify vertex', function() {

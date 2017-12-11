@@ -90,6 +90,14 @@ public class OWLOntologyUtil {
         return val == null || Boolean.parseBoolean(val);
     }
 
+    public static Integer getSortPriority(OWLOntology o, OWLEntity owlEntity) {
+        String val = getAnnotationValueByUri(o, owlEntity, OntologyProperties.SORT_PRIORITY.getPropertyName());
+        if (val == null) {
+            return null;
+        }
+        return Integer.parseInt(val);
+    }
+
     public static boolean getUpdateable(OWLOntology o, OWLEntity owlEntity) {
         String val = getAnnotationValueByUri(o, owlEntity, OntologyProperties.UPDATEABLE.getPropertyName());
         return val == null || Boolean.parseBoolean(val);
@@ -267,6 +275,9 @@ public class OWLOntologyUtil {
         }
         if ("http://visallo.org#geolocation".equals(iri)) {
             return PropertyType.GEO_LOCATION;
+        }
+        if ("http://visallo.org#geoshape".equals(iri)) {
+            return PropertyType.GEO_SHAPE;
         }
         if ("http://visallo.org#directory/entity".equals(iri)) {
             return PropertyType.DIRECTORY_ENTITY;

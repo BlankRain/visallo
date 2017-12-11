@@ -55,17 +55,17 @@
               addStylesNode.parentElement.removeChild(addStylesNode);
           }
       };
-      var raf = requestAnimationFrame || mozRequestAnimationFrame || webkitRequestAnimationFrame || msRequestAnimationFrame;
-      if (raf) {
-        raf(function() { window.setTimeout(loadDeferredStyles, 0); });
-      } else {
-        window.addEventListener('load', loadDeferredStyles);
-      }
+      document.addEventListener('DOMContentLoaded', loadDeferredStyles);
+
       function removeMinification() {
         for (var i = 0; i < arguments.length; i++) {
           var name = arguments[i];
           if (name in require.paths) {
-            require.paths[name] = require.paths[name].replace(/\.min$/, '');
+            if (name === 'react' || name === 'react-dom') {
+              require.paths[name] = require.paths[name].replace(/production\.min$/, 'development');
+            } else {
+              require.paths[name] = require.paths[name].replace(/\.min$/, '');
+            }
           } else console.warn('No path found: ', name)
         }
       }

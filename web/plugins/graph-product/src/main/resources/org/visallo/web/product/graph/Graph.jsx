@@ -35,7 +35,7 @@ define([
     const generateCompoundEdgeId = edge => edge.outVertexId + edge.inVertexId + edge.label;
     const isGhost = cyElement => cyElement && cyElement._private && cyElement._private.data && cyElement._private.data.animateTo;
     const isValidElement = cyElement => cyElement && cyElement.is('.c,.v,.e,.partial') && !isGhost(cyElement);
-    const isValidNode = cyElement => cyElement && cyElement.is('node.c,node.v,node.partial,node.ancillary') && !isGhost(cyElement);
+    const isValidNode = cyElement => cyElement && cyElement.is('node.c,node.v,node.partial') && !isGhost(cyElement);
     const canUpdatePosition = isValidNode;
     const canSelect = isValidElement;
     const canRemove = isValidElement;
@@ -133,6 +133,7 @@ define([
         },
 
         componentDidMount() {
+            this.mounted = true;
             memoizeClear();
             this.cyNodeIdsWithPositionChanges = {};
 
@@ -255,6 +256,7 @@ define([
         },
 
         componentWillUnmount() {
+            this.mounted = false;
             this.removeEvents.forEach(({ node, func, events }) => {
                 $(node).off(events, func);
             })
@@ -280,7 +282,7 @@ define([
 
         render() {
             var { viewport, initialProductDisplay, draw, paths } = this.state,
-                { panelPadding, registry, workspace, product } = this.props,
+                { panelPadding, registry, workspace, product, interacting } = this.props,
                 { editable } = workspace,
                 { previewMD5 } = product,
                 config = {...CONFIGURATION(this.props), ...viewport},
@@ -326,6 +328,7 @@ define([
                         config={config}
                         panelPadding={panelPadding}
                         elements={cyElements}
+                        interacting={interacting}
                         drawEdgeToMouseFrom={draw ? _.pick(draw, 'vertexId', 'toVertexId') : null }
                         drawPaths={paths}
                         onGhostFinished={this.props.onGhostFinished}
@@ -349,19 +352,37 @@ define([
             const cy = this.cytoscape.state.cy;
             const collapsedNodes = cy.nodes().filter('node.c');
             const mappedIds = {};
+            const findRenderedNodeId = (id) => {
+                if (!(id in mappedIds)) {
+                    if (cy.getElementById(id).length) {
+                        mappedIds[id] = id
+                    } else {
+                        const parentNode = collapsedNodes.filter(node => node.data('vertexIds').includes(id))
+                        mappedIds[id] = parentNode.length === 1 ? parentNode.id() : null
+                    }
+                }
+
+                return mappedIds[id]
+            }
 
             if (data.paths.length > MaxPathsToFocus) {
                 data.paths = data.paths.slice(0, MaxPathsToFocus);
-                $(document).trigger('displayInformation', { message: 'Too many paths to show, will display the first ' + MaxPathsToFocus })
+                $(document).trigger('displayInformation', {
+                    message: i18n('org.visallo.web.product.graph.findPath.too.many', MaxPathsToFocus)
+                })
             }
 
-            data.renderedPaths = data.paths.map(path => path.map(id => {
-                mappedIds[id] = mappedIds[id] || (
-                    cy.getElementById(id).length
-                        ? id : (collapsedNodes.filter(node => node.data('vertexIds').includes(id)).id() || id)
-                );
-                return mappedIds[id];
-            }));
+            data.renderedPaths = data.paths.reduce((renderedPaths, path) => {
+                const sourceId = findRenderedNodeId(path[0])
+                const targetId = findRenderedNodeId(path[(path.length - 1)])
+
+                if (sourceId && targetId) {
+                    const renderedPath = path.map(findRenderedNodeId)
+                    renderedPaths.push(renderedPath)
+                }
+
+                return renderedPaths
+            }, [])
 
             this.setState({
                 paths: data
@@ -392,8 +413,10 @@ define([
         },
 
         requestUpdate() {
-            memoizeClear();
-            this.forceUpdate();
+            if (this.mounted) {
+                memoizeClear();
+                this.forceUpdate();
+            }
         },
 
         onReady({ cy }) {
@@ -769,11 +792,13 @@ define([
                 const { pageX, pageY } = originalEvent;
                 if (target.is('node.c')) {
                     this.props.onCollapsedItemMenu(originalEvent.target, target.id(), { x: pageX, y: pageY });
-                } else if (target.isNode()) {
-                    this.props.onVertexMenu(originalEvent.target, target.id(), { x: pageX, y: pageY });
-                } else {
-                    const edgeIds = _.pluck(target.data('edgeInfos'), 'edgeId');
-                    this.props.onEdgeMenu(originalEvent.target, edgeIds, { x: pageX, y: pageY });
+                } else if (isValidElement(target)) {
+                    if (target.isNode()) {
+                        this.props.onVertexMenu(originalEvent.target, target.id(), { x: pageX, y: pageY });
+                    } else {
+                        const edgeIds = _.pluck(target.data('edgeInfos'), 'edgeId');
+                        this.props.onEdgeMenu(originalEvent.target, edgeIds, { x: pageX, y: pageY });
+                    }
                 }
             }
         },
@@ -889,16 +914,13 @@ define([
 
                 if (ancillary) {
                     selected = false;
-                    selectable = true;
+                    selectable = false;
                     classes = 'ancillary';
-                    data = { id };
-                    let extensionHandled = false;
                     registry['org.visallo.graph.ancillary'].forEach(({
-                        canHandle, canDisplayBeforeVertex, data: dataFn, classes: classFn
+                        canHandle, data: dataFn, classes: classFn
                     }) => {
                         const vertexReady = id in vertices;
-                        if (canHandle(node) && (vertexReady || canDisplayBeforeVertex(node))) {
-                            extensionHandled = true;
+                        if (canHandle(node) && vertexReady) {
                             if (dataFn) {
                                 data = { ...dataFn(node, vertices[id]), id };
                             }
@@ -911,12 +933,11 @@ define([
                         }
                     })
 
-                    if (!extensionHandled) {
-                        classes += ' unhandled';
-                    }
-
                     if (data) {
                         renderedNodeIds[id] = true;
+                    } else {
+                        data = { id }
+                        classes = 'unhandled';
                     }
                 } else if (type === 'vertex') {
                     selected = id in verticesSelectedById;
@@ -1151,7 +1172,9 @@ define([
                         }
                         let classes = 'e';
                         if (edgeInfos.some(({ edgeId }) => edgeId in focusing.edges)) {
-                            classes += ' focusing';
+                            classes += ' focus';
+                        } else if (focusing.isFocusing) {
+                            classes += ' focus-dim';
                         }
 
                         const edgeData = {
@@ -1378,6 +1401,9 @@ define([
         if (_.any(edgeInfos, info => info.edgeId in focusing.edges)) {
             return classes + ' focus';
         }
+        if (focusing.isFocusing) {
+            return classes + ' focus-dim'
+        }
         return classes;
     };
 
@@ -1496,6 +1522,9 @@ define([
         if (id in focusing.vertices) {
             return classes + ' focus';
         }
+        if (focusing.isFocusing) {
+            return classes + ' focus-dim'
+        }
         return classes;
     };
 
@@ -1520,6 +1549,8 @@ define([
 
             if (vertexIds.some(vertexId => vertexId in focusing.vertices)) {
                 cls.push('focus');
+            } else if (focusing.isFocusing) {
+                cls.push('focus-dim');
             }
         } else {
             cls.push('partial');

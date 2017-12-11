@@ -57,7 +57,7 @@ public class Messaging implements AtmosphereHandler { //extends AbstractReflecto
     private WorkspaceRepository workspaceRepository;
     private WorkQueueRepository workQueueRepository;
     private UserSessionCounterRepository userSessionCounterRepository;
-    private boolean subscribedToBroadcast = false;
+    private WorkQueueRepository.BroadcastConsumer broadcastConsumer;
     private Map<AtmosphereResource.TRANSPORT, Counter> requestsCounters = new HashMap<>();
 
     @Override
@@ -102,16 +102,16 @@ public class Messaging implements AtmosphereHandler { //extends AbstractReflecto
             injector.injectMembers(this);
         }
 
-        if (!subscribedToBroadcast) {
-            this.workQueueRepository.subscribeToBroadcastMessages(new WorkQueueRepository.BroadcastConsumer() {
+        if (broadcastConsumer == null) {
+            broadcastConsumer = new WorkQueueRepository.BroadcastConsumer() {
                 @Override
                 public void broadcastReceived(JSONObject json) {
                     if (broadcaster != null) {
                         broadcaster.broadcast(json.toString());
                     }
                 }
-            });
-            subscribedToBroadcast = true;
+            };
+            this.workQueueRepository.subscribeToBroadcastMessages(broadcastConsumer);
         }
         broadcaster = resource.getBroadcaster();
     }
@@ -119,6 +119,9 @@ public class Messaging implements AtmosphereHandler { //extends AbstractReflecto
     @Override
     public void destroy() {
         LOGGER.debug("destroy");
+        if (broadcastConsumer != null) {
+            this.workQueueRepository.unsubscribeFromBroadcastMessages(broadcastConsumer);
+        }
     }
 
     @Override
@@ -303,9 +306,8 @@ public class Messaging implements AtmosphereHandler { //extends AbstractReflecto
 
     @Inject
     public void setMetricsManager(JmxMetricsManager metricsManager) {
-        String namePrefix = metricsManager.getNamePrefix(this);
         for (AtmosphereResource.TRANSPORT transport : AtmosphereResource.TRANSPORT.values()) {
-            requestsCounters.put(transport, metricsManager.counter(namePrefix + transport.name()));
+            requestsCounters.put(transport, metricsManager.counter(this, transport.name()));
         }
     }
 }
